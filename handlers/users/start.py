@@ -81,7 +81,13 @@ async def start_command(message: Message) -> None:
         text=(
             "Assalomu alaykum.\n\n"
             "Bu bot korrupsiyaga oid murojaatlarni qabul qiladi, ularni avtomatik tahlil qiladi "
-            "va mas'ullarga yuboradi. Siz oddiy yoki anonim murojaat yuborishingiz mumkin."
+            "va mas'ullarga yuboradi. Siz oddiy yoki anonim murojaat yuborishingiz mumkin.\n\n"
+            "Korrupsiyaga qarshi kurashish komplaens nazorat boshqarmasi\n\n"
+            "Telefon:\n"
+            "+998 77 208 26 26\n\n"
+            "Telefon:\n"
+            "+998 71 203 26 26\n"
+            "(1033)"
         ),
         reply_markup=main_menu,
     )
