@@ -18,6 +18,7 @@ class DelChannelState(StatesGroup):
 
 class AppealState(StatesGroup):
     """Murojaat yuborish holatlari"""
+    appeal_type = State()
     full_name = State()
     phone = State()
     organization = State()

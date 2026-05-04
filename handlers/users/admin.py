@@ -308,14 +308,17 @@ async def recent_appeals(message: Message) -> None:
         return
 
     lines = ["🆕 <b>So'nggi murojaatlar</b>\n"]
-    for appeal_id, _, full_name, phone, organization, category, risk_level, priority, status, created_at, message_text in appeals:
+    for appeal_id, _, full_name, phone, organization, category, risk_level, priority, status, created_at, message_text, is_anonymous in appeals:
         organization_name = organization or "ko'rsatilmagan"
+        mode = "Anonim" if is_anonymous else "Oddiy"
+        display_name = "Anonim yuboruvchi" if is_anonymous else full_name
+        display_phone = "Yashirilgan" if is_anonymous else phone
         preview = (message_text or "").strip().replace("\n", " ")
         if len(preview) > 220:
             preview = f"{preview[:217]}..."
         lines.append(
-            f"#{appeal_id} | {full_name} | {category} | {risk_level} | {status}\n"
-            f"Tel: {phone} | Bo'lim: {organization_name}\n"
+            f"#{appeal_id} | {display_name} | {category} | {risk_level} | {status}\n"
+            f"Tel: {display_phone} | Bo'lim: {organization_name} | Rejim: {mode}\n"
             f"Muhimlik: {priority} | Sana: {created_at}\n"
             f"Murojaat: {preview}\n"
         )

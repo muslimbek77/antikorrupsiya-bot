@@ -128,6 +128,7 @@ class Database:
             full_name TEXT NOT NULL,
             phone TEXT NOT NULL,
             organization TEXT,
+            is_anonymous INTEGER DEFAULT 0,
             message_text TEXT NOT NULL,
             category TEXT DEFAULT 'Boshqa',
             risk_level TEXT DEFAULT 'Past',
@@ -147,9 +148,26 @@ class Database:
         """
         try:
             self.execute_script(sql)
+            self.ensure_column(
+                table_name="Appeals",
+                column_name="is_anonymous",
+                column_definition="INTEGER DEFAULT 0",
+            )
             logger.info("Appeals table created successfully")
         except sqlite3.Error as e:
             logger.error(f"Failed to create appeals table: {e}")
+
+    def ensure_column(self, table_name: str, column_name: str, column_definition: str) -> None:
+        """Jadvalda ustun mavjudligini tekshirish va kerak bo'lsa qo'shish"""
+        sql = f"PRAGMA table_info({table_name});"
+        columns = self.execute(sql, fetchall=True) or []
+        column_names = {column[1] for column in columns}
+        if column_name in column_names:
+            return
+
+        alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition};"
+        self.execute(alter_sql, commit=True)
+        logger.info("Added missing column %s to %s", column_name, table_name)
 
     @staticmethod
     def format_args(sql: str, parameters: dict) -> Tuple[str, Tuple]:
@@ -187,16 +205,17 @@ class Database:
         full_name: str,
         phone: str,
         organization: str,
+        is_anonymous: bool,
         message_text: str,
         analysis: Dict[str, str],
     ) -> int:
         """Yangi murojaatni saqlash"""
         sql = """
         INSERT INTO Appeals (
-            user_id, full_name, phone, organization, message_text,
+            user_id, full_name, phone, organization, is_anonymous, message_text,
             category, risk_level, priority, status, route_to,
             ai_summary, ai_keywords, ai_notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         connection = self.connection
         try:
@@ -208,6 +227,7 @@ class Database:
                     full_name,
                     phone,
                     organization,
+                    int(is_anonymous),
                     message_text,
                     analysis.get("category", "Boshqa"),
                     analysis.get("risk_level", "Past"),
@@ -303,7 +323,7 @@ class Database:
     def get_user_appeals(self, user_id: int, limit: int = 5) -> List[Tuple]:
         """Foydalanuvchi murojaatlarini olish"""
         sql = """
-        SELECT id, category, risk_level, status, created_at
+        SELECT id, category, risk_level, status, created_at, is_anonymous
         FROM Appeals
         WHERE user_id = ?
         ORDER BY created_at DESC
@@ -318,7 +338,7 @@ class Database:
     def get_recent_appeals(self, limit: int = 10) -> List[Tuple]:
         """So'nggi murojaatlarni olish"""
         sql = """
-        SELECT id, user_id, full_name, phone, organization, category, risk_level, priority, status, created_at, message_text
+        SELECT id, user_id, full_name, phone, organization, category, risk_level, priority, status, created_at, message_text, is_anonymous
         FROM Appeals
         ORDER BY created_at DESC
         LIMIT ?;
