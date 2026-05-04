@@ -42,6 +42,7 @@ async def on_startup_notify(bot: Bot) -> None:
         await set_default_commands(bot)
         db.create_table_users()
         db.create_table_channels()
+        db.create_table_appeals()
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
 

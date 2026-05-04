@@ -1,6 +1,6 @@
-import sqlite3
 import logging
-from typing import Any, Optional, Tuple, List
+import sqlite3
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,20 @@ class Database:
         finally:
             connection.close()
 
+    def execute_script(self, sql: str) -> None:
+        """Bir nechta SQL buyruqlarini ketma-ket bajarish"""
+        connection = self.connection
+        try:
+            connection.executescript(sql)
+            connection.commit()
+            logger.debug("SQL script committed successfully")
+        except sqlite3.Error as e:
+            logger.error(f"Database script error: {e}\nSQL: {sql}")
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     def create_table_users(self) -> None:
         """Foydalanuvchilar jadvalini yaratish"""
         sql = """
@@ -83,7 +97,7 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_telegram_id ON Users(telegram_id);
         """
         try:
-            self.execute(sql, commit=True)
+            self.execute_script(sql)
             logger.info("Users table created successfully")
         except sqlite3.Error as e:
             logger.error(f"Failed to create users table: {e}")
@@ -100,10 +114,42 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_channel_id ON Channels(channel_id);
         """
         try:
-            self.execute(sql, commit=True)
+            self.execute_script(sql)
             logger.info("Channels table created successfully")
         except sqlite3.Error as e:
             logger.error(f"Failed to create channels table: {e}")
+
+    def create_table_appeals(self) -> None:
+        """Murojaatlar jadvalini yaratish"""
+        sql = """
+        CREATE TABLE IF NOT EXISTS Appeals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            full_name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            organization TEXT,
+            message_text TEXT NOT NULL,
+            category TEXT DEFAULT 'Boshqa',
+            risk_level TEXT DEFAULT 'Past',
+            priority TEXT DEFAULT 'Rejalashtirilgan',
+            status TEXT DEFAULT 'Yangi',
+            route_to TEXT DEFAULT 'Operator ko''rib chiqishi',
+            ai_summary TEXT,
+            ai_keywords TEXT,
+            ai_notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES Users(telegram_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_appeals_user_id ON Appeals(user_id);
+        CREATE INDEX IF NOT EXISTS idx_appeals_status ON Appeals(status);
+        CREATE INDEX IF NOT EXISTS idx_appeals_risk_level ON Appeals(risk_level);
+        """
+        try:
+            self.execute_script(sql)
+            logger.info("Appeals table created successfully")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to create appeals table: {e}")
 
     @staticmethod
     def format_args(sql: str, parameters: dict) -> Tuple[str, Tuple]:
@@ -134,6 +180,55 @@ class Database:
         except sqlite3.Error as e:
             logger.error(f"Failed to add channel: {e}")
             raise
+
+    def add_appeal(
+        self,
+        user_id: int,
+        full_name: str,
+        phone: str,
+        organization: str,
+        message_text: str,
+        analysis: Dict[str, str],
+    ) -> int:
+        """Yangi murojaatni saqlash"""
+        sql = """
+        INSERT INTO Appeals (
+            user_id, full_name, phone, organization, message_text,
+            category, risk_level, priority, status, route_to,
+            ai_summary, ai_keywords, ai_notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+        connection = self.connection
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                sql,
+                (
+                    user_id,
+                    full_name,
+                    phone,
+                    organization,
+                    message_text,
+                    analysis.get("category", "Boshqa"),
+                    analysis.get("risk_level", "Past"),
+                    analysis.get("priority", "Rejalashtirilgan"),
+                    "Yangi",
+                    analysis.get("route_to", "Operator ko'rib chiqishi"),
+                    analysis.get("summary", ""),
+                    analysis.get("keywords", ""),
+                    analysis.get("analysis_notes", ""),
+                ),
+            )
+            connection.commit()
+            appeal_id = cursor.lastrowid
+            logger.info("Appeal added: %s", appeal_id)
+            return int(appeal_id)
+        except sqlite3.Error as e:
+            connection.rollback()
+            logger.error(f"Failed to add appeal: {e}")
+            raise
+        finally:
+            connection.close()
     
     def select_all_channels(self) -> List[Tuple]:
         """Barcha kanallarni olib olish"""
@@ -203,4 +298,76 @@ class Database:
             return result or []
         except sqlite3.Error as e:
             logger.error(f"Failed to get user IDs: {e}")
+            return []
+
+    def get_user_appeals(self, user_id: int, limit: int = 5) -> List[Tuple]:
+        """Foydalanuvchi murojaatlarini olish"""
+        sql = """
+        SELECT id, category, risk_level, status, created_at
+        FROM Appeals
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?;
+        """
+        try:
+            return self.execute(sql, parameters=(user_id, limit), fetchall=True) or []
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get user appeals: {e}")
+            return []
+
+    def get_recent_appeals(self, limit: int = 10) -> List[Tuple]:
+        """So'nggi murojaatlarni olish"""
+        sql = """
+        SELECT id, user_id, full_name, phone, organization, category, risk_level, priority, status, created_at, message_text
+        FROM Appeals
+        ORDER BY created_at DESC
+        LIMIT ?;
+        """
+        try:
+            return self.execute(sql, parameters=(limit,), fetchall=True) or []
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get recent appeals: {e}")
+            return []
+
+    def get_appeal_statistics(self) -> Dict[str, int]:
+        """Asosiy murojaatlar statistikasini olish"""
+        queries = {
+            "total": "SELECT COUNT(*) FROM Appeals;",
+            "today": "SELECT COUNT(*) FROM Appeals WHERE DATE(created_at) = DATE('now', 'localtime');",
+            "high_risk": "SELECT COUNT(*) FROM Appeals WHERE risk_level = 'Yuqori';",
+            "in_review": "SELECT COUNT(*) FROM Appeals WHERE status IN ('Yangi', 'Ko''rib chiqilmoqda');",
+            "resolved": "SELECT COUNT(*) FROM Appeals WHERE status = 'Yakunlangan';",
+        }
+        stats = {}
+        for key, sql in queries.items():
+            result = self.execute(sql, fetchone=True)
+            stats[key] = result[0] if result else 0
+        return stats
+
+    def get_category_statistics(self) -> List[Tuple[str, int]]:
+        """Toifalar kesimidagi statistika"""
+        sql = """
+        SELECT category, COUNT(*) AS total
+        FROM Appeals
+        GROUP BY category
+        ORDER BY total DESC, category ASC;
+        """
+        try:
+            return self.execute(sql, fetchall=True) or []
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get category statistics: {e}")
+            return []
+
+    def get_risk_statistics(self) -> List[Tuple[str, int]]:
+        """Xavf darajalari kesimidagi statistika"""
+        sql = """
+        SELECT risk_level, COUNT(*) AS total
+        FROM Appeals
+        GROUP BY risk_level
+        ORDER BY total DESC, risk_level ASC;
+        """
+        try:
+            return self.execute(sql, fetchall=True) or []
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get risk statistics: {e}")
             return []

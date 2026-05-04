@@ -12,10 +12,11 @@ async def help_commands(message: Message) -> None:
     help_text = (
         "🆘 <b>Yordam</b>\n\n"
         "Bot quyidagi xizmatlarni taqdim etadi:\n\n"
-        "• 📢 Kanallar orqali habarlar olish\n"
-        "• 🔔 Muhim yangiliklar haqida bildirishnoma\n"
-        "• ⚙️ Shaxsiy sozlamalar\n\n"
-        "Savollaringiz bo'lsa, admin bilan bog'laning."
+        "• 📝 Korrupsiyaga oid murojaat yuborish\n"
+        "• 🤖 Murojaatni avtomatik AI tahlil qilish\n"
+        "• 📊 Murojaat holatini kuzatish\n"
+        "• 📄 Admin uchun statistik PDF hisobot yaratish\n\n"
+        "Boshlash uchun /start yoki asosiy menyudan foydalaning."
     )
     await message.answer(help_text, parse_mode="HTML")
     logger.info(f"Help requested by user {message.from_user.id}")

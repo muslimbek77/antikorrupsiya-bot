@@ -14,3 +14,11 @@ class ChannelState(StatesGroup):
 class DelChannelState(StatesGroup):
     """Kanal o'chirish holatlari"""
     delete_channel = State()
+
+
+class AppealState(StatesGroup):
+    """Murojaat yuborish holatlari"""
+    full_name = State()
+    phone = State()
+    organization = State()
+    message = State()

@@ -21,6 +21,13 @@ admin_button = ReplyKeyboardMarkup(
             KeyboardButton(text="➕ Kanal qo'shish"),
             KeyboardButton(text="➖ Kanal o'chirish"),
         ],
+        [
+            KeyboardButton(text="📈 Murojaatlar statistikasi"),
+            KeyboardButton(text="🆕 So'nggi murojaatlar"),
+        ],
+        [
+            KeyboardButton(text="📄 PDF hisobot"),
+        ],
     ],
     resize_keyboard=True,
     input_field_placeholder="📋 Menudan birini tanlang"

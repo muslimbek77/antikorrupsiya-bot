@@ -1,9 +1,9 @@
 import asyncio
 import logging
-from typing import Optional
+import os
 
-from aiogram import F, Dispatcher
-from aiogram.types import Message, CallbackQuery
+from aiogram import F
+from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramAPIError
@@ -12,12 +12,11 @@ from loader import bot, db, dp, ADMINS
 from filters.admin import IsBotAdminFilter
 from states.reklama import Adverts, ChannelState, DelChannelState
 from keyboard_buttons import admin_keyboard
+from services.pdf_report import generate_statistics_pdf
 
 logger = logging.getLogger(__name__)
 
-# Konstanti
 ADVERT_DELAY = 0.01  # Reklama yuborishda kechikish (Telegram API chekloviga ko'ra)
-RATE_LIMIT_DELAY = 0.05  # Umumiy rate limiting
 
 
 @dp.message(Command("admin"), IsBotAdminFilter(ADMINS))
@@ -277,3 +276,71 @@ async def delete_channel(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
 
 
+@dp.message(F.text == "📈 Murojaatlar statistikasi", IsBotAdminFilter(ADMINS))
+async def appeal_statistics(message: Message) -> None:
+    """Murojaatlar statistikasini ko'rsatish"""
+    stats = db.get_appeal_statistics()
+    categories = db.get_category_statistics()
+    risks = db.get_risk_statistics()
+
+    category_lines = "\n".join([f"• {name}: {count}" for name, count in categories[:5]]) or "• Ma'lumot yo'q"
+    risk_lines = "\n".join([f"• {name}: {count}" for name, count in risks]) or "• Ma'lumot yo'q"
+
+    text = (
+        "📈 <b>Murojaatlar statistikasi</b>\n\n"
+        f"Jami: <b>{stats['total']}</b>\n"
+        f"Bugun: <b>{stats['today']}</b>\n"
+        f"Yuqori xavf: <b>{stats['high_risk']}</b>\n"
+        f"Ko'rib chiqilmoqda: <b>{stats['in_review']}</b>\n"
+        f"Yakunlangan: <b>{stats['resolved']}</b>\n\n"
+        f"<b>Top toifalar</b>\n{category_lines}\n\n"
+        f"<b>Xavf kesimi</b>\n{risk_lines}"
+    )
+    await message.answer(text, parse_mode="HTML")
+
+
+@dp.message(F.text == "🆕 So'nggi murojaatlar", IsBotAdminFilter(ADMINS))
+async def recent_appeals(message: Message) -> None:
+    """So'nggi murojaatlarni ko'rsatish"""
+    appeals = db.get_recent_appeals(limit=7)
+    if not appeals:
+        await message.answer("Hali murojaatlar mavjud emas.")
+        return
+
+    lines = ["🆕 <b>So'nggi murojaatlar</b>\n"]
+    for appeal_id, _, full_name, phone, organization, category, risk_level, priority, status, created_at, message_text in appeals:
+        organization_name = organization or "ko'rsatilmagan"
+        preview = (message_text or "").strip().replace("\n", " ")
+        if len(preview) > 220:
+            preview = f"{preview[:217]}..."
+        lines.append(
+            f"#{appeal_id} | {full_name} | {category} | {risk_level} | {status}\n"
+            f"Tel: {phone} | Bo'lim: {organization_name}\n"
+            f"Muhimlik: {priority} | Sana: {created_at}\n"
+            f"Murojaat: {preview}\n"
+        )
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+
+@dp.message(F.text == "📄 PDF hisobot", IsBotAdminFilter(ADMINS))
+async def export_pdf_report(message: Message) -> None:
+    """PDF hisobot yaratish va yuborish"""
+    stats = db.get_appeal_statistics()
+    recent = db.get_recent_appeals(limit=10)
+    categories = db.get_category_statistics()
+    risks = db.get_risk_statistics()
+
+    reports_dir = os.path.join(os.getcwd(), "reports")
+    output_path = os.path.join(reports_dir, "appeals_report.pdf")
+    generate_statistics_pdf(
+        output_path=output_path,
+        stats=stats,
+        category_stats=categories,
+        risk_stats=risks,
+        recent_appeals=recent,
+    )
+
+    await message.answer_document(
+        document=FSInputFile(output_path),
+        caption="Korrupsiyaga oid murojaatlar bo'yicha PDF hisobot",
+    )
