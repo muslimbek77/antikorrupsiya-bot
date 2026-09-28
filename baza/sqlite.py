@@ -251,8 +251,13 @@ class Database:
             connection.close()
     
     def select_all_channels(self) -> List[Tuple]:
-        """Barcha kanallarni olib olish"""
-        sql = "SELECT * FROM Channels ORDER BY created_at DESC"
+        """
+        Barcha kanallarni olib olish.
+
+        Ustunlar aniq sanab o'tilgan: "SELECT *" created_at ni ham qaytarardi va
+        chaqiruvchi kod uni uch qiymatga ochgani uchun ValueError chiqardi.
+        """
+        sql = "SELECT channel_id, channel_name, channel_link FROM Channels ORDER BY created_at DESC"
         try:
             result = self.execute(sql, fetchall=True)
             return result or []

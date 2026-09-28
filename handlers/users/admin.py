@@ -163,7 +163,8 @@ async def add_channel(message: Message, state: FSMContext) -> None:
         
         # Bot kanal azo'dligini tekshirish
         try:
-            await bot.get_chat_member(channel_id, bot.session.bot.id)
+            me = await bot.me()
+            await bot.get_chat_member(channel_id, me.id)
         except TelegramAPIError:
             raise Exception("Bot kanal yoki guruhga qo'shilmagan")
         
